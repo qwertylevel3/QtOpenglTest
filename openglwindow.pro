@@ -9,3 +9,6 @@ INSTALLS += target
 DISTFILES += \
     testvsh.vsh \
     testfsh.fsh
+
+RESOURCES += \
+    image.qrc

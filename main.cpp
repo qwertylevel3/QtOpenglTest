@@ -44,13 +44,22 @@
 #include <QtGui/QMatrix4x4>
 #include <QtGui/QOpenGLShaderProgram>
 #include <QtGui/QScreen>
-
+#include<QOpenGLTexture>
 #include <QtCore/qmath.h>
+#include<QImage>
+#include<QString>
+#include<QOpenGLShaderProgram>
+#include<QOpenGLContext>
+
+#define PROGRAM_VERTEX_ATTRIBUTE 0
+#define PROGRAM_TEXCOORD_ATTRIBUTE 1
 
 class TriangleWindow : public OpenGLWindow
 {
 public:
     TriangleWindow();
+    ~TriangleWindow();
+
 
     void initialize() Q_DECL_OVERRIDE;
     void render() Q_DECL_OVERRIDE;
@@ -61,23 +70,47 @@ private:
     GLuint m_posAttr;
     GLuint m_colAttr;
     GLuint m_matrixUniform;
+    int xRot;
+    int yRot;
+    int zRot;
+
+    QOpenGLTexture *textures;
 
     QOpenGLShaderProgram *m_program;
+
+    QOpenGLBuffer vbo;
+
     int m_frame;
 };
 
 TriangleWindow::TriangleWindow()
-    : m_program(0)
-    , m_frame(0)
+        : xRot(0)
+        ,yRot(0)
+        ,zRot(0)
+        ,m_program(0)
+        , m_frame(0)
 {
+    textures=0;
+}
+
+TriangleWindow::~TriangleWindow()
+{
+    vbo.destroy();
+    delete textures;
+    delete m_program;
 }
 
 int main(int argc, char **argv)
 {
+
+    Q_INIT_RESOURCE(image);
+
     QGuiApplication app(argc, argv);
 
     QSurfaceFormat format;
     format.setSamples(16);
+    format.setDepthBufferSize(24);
+    QSurfaceFormat::setDefaultFormat(format);
 
     TriangleWindow window;
     window.setFormat(format);
@@ -99,26 +132,58 @@ GLuint TriangleWindow::loadShader(GLenum type, const char *source)
 
 void TriangleWindow::initialize()
 {
+
+    initializeOpenGLFunctions();
+
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+
+    static const int coords[4][3] = {
+        { 1, 1, 1 },
+        { 1, -1, 1 },
+        { -1, -1, 1 },
+        { -1, 1, 1 }
+    };
+
+    //加载纹理
+    QImage image=QImage(":/side1.png");
+    textures = new QOpenGLTexture(image.mirrored());
+    textures->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+    textures->setMagnificationFilter(QOpenGLTexture::Linear);
+
+    QVector<GLfloat> vertData;
+
+    for (int j = 0; j < 4; ++j) {
+        // vertex position
+        vertData.append(0.2 * coords[j][0]);
+        vertData.append(0.2 * coords[j][1]);
+        vertData.append(0.2 * coords[j][2]);
+        // texture coordinate
+        vertData.append(j == 0 || j == 3);
+        vertData.append(j == 0 || j == 1);
+    }
+    vbo.create();
+    vbo.bind();
+    vbo.allocate(vertData.constData(), vertData.count() * sizeof(GLfloat));
+
+
     m_program = new QOpenGLShaderProgram(this);
     //调用当前目录下两个shader（影子目录）
     m_program->addShaderFromSourceFile(QOpenGLShader::Vertex,"testvsh.vsh");
     m_program->addShaderFromSourceFile(QOpenGLShader::Fragment,"testfsh.fsh");
 
+    m_program->bindAttributeLocation("vertex", PROGRAM_VERTEX_ATTRIBUTE);
+    m_program->bindAttributeLocation("texCoord", PROGRAM_TEXCOORD_ATTRIBUTE);
     m_program->link();
-    m_posAttr = m_program->attributeLocation("posAttr");
-    m_colAttr = m_program->attributeLocation("colAttr");
-    m_matrixUniform = m_program->uniformLocation("matrix");
+
+    m_program->bind();
+    m_program->setUniformValue("texture", 0);
 }
 
 void TriangleWindow::render()
 {
-    const qreal retinaScale = devicePixelRatio();
-
-    glViewport(0, 0, width() * retinaScale, height() * retinaScale);
-
-    glClear(GL_COLOR_BUFFER_BIT);
-
-    m_program->bind();
+    glClearColor(0,0,0,0);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     QMatrix4x4 matrix;
     matrix.perspective(60.0f, 4.0f/3.0f, 0.1f, 100.0f);
@@ -127,34 +192,33 @@ void TriangleWindow::render()
     //screen()->refreshRate():屏幕刷新率,一般是60
     matrix.rotate(100.0f * m_frame / screen()->refreshRate(), 0, 1, 0);
 
-    m_program->setUniformValue(m_matrixUniform, matrix);
+    QMatrix4x4 m;
+    m.ortho(-0.5f, +0.5f, +0.5f, -0.5f, 4.0f, 15.0f);
+    m.translate(0.0f, 0.0f, -10.0f);
+    m.rotate(xRot / 16.0f, 1.0f, 0.0f, 0.0f);
+    m.rotate(yRot / 16.0f, 0.0f, 1.0f, 0.0f);
+    m.rotate(zRot / 16.0f, 0.0f, 0.0f, 1.0f);
 
-    GLfloat vertices[] = {
-        -0.5f, 0.5f,
-        -0.5f, -0.5f,
-        0.5f,0.5f,
-        0.5f, -0.5f
-    };
+    zRot+=m_frame;
+    xRot+=m_frame;
+    yRot+=m_frame;
 
-    GLfloat colors[] = {
-        1.0f, 0.0f, 0.0f,
-        0.0f, 1.0f, 0.0f,
-        0.0f, 0.0f, 1.0f,
-        0.0f, 0.0f, 1.0f
-    };
+    m_program->setUniformValue("matrix", m);
+    m_program->enableAttributeArray(PROGRAM_VERTEX_ATTRIBUTE);
+    m_program->enableAttributeArray(PROGRAM_TEXCOORD_ATTRIBUTE);
+    m_program->setAttributeBuffer(PROGRAM_VERTEX_ATTRIBUTE, GL_FLOAT, 0, 3, 5 * sizeof(GLfloat));
+    m_program->setAttributeBuffer(PROGRAM_TEXCOORD_ATTRIBUTE, GL_FLOAT, 3 * sizeof(GLfloat), 2, 5 * sizeof(GLfloat));
 
-    glVertexAttribPointer(m_posAttr, 2, GL_FLOAT, GL_FALSE, 0, vertices);
-    glVertexAttribPointer(m_colAttr, 3, GL_FLOAT, GL_FALSE, 0, colors);
 
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
+    const qreal retinaScale = devicePixelRatio();
+    glViewport(0, 0, width() * retinaScale, height() * retinaScale);
 
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    //m_program->bind();
 
-    glDisableVertexAttribArray(1);
-    glDisableVertexAttribArray(0);
+    textures->bind();
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
-    m_program->release();
+    //m_program->release();
 
     ++m_frame;
 }
