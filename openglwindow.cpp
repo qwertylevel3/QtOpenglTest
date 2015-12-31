@@ -46,106 +46,119 @@
 #include <QtGui/QOpenGLPaintDevice>
 #include <QtGui/QPainter>
 
-OpenGLWindow::OpenGLWindow(QWindow *parent)
-    : QWindow(parent)
+#define PROGRAM_VERTEX_ATTRIBUTE 0
+#define PROGRAM_TEXCOORD_ATTRIBUTE 1
+
+OpenGLWindow::OpenGLWindow(QWidget *parent)
+    : QOpenGLWidget(parent)
     , m_update_pending(false)
     , m_animating(false)
     , m_context(0)
-    , m_device(0)
 {
-    setSurfaceType(QWindow::OpenGLSurface);
+
 }
 
 OpenGLWindow::~OpenGLWindow()
 {
-    delete m_device;
 }
-
-void OpenGLWindow::render(QPainter *painter)
+void OpenGLWindow::timerEvent(QTimerEvent *e)
 {
-    Q_UNUSED(painter);
+    update();
 }
 
-void OpenGLWindow::initialize()
+GLuint OpenGLWindow::loadShader(GLenum type, const char *source)
 {
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &source, 0);
+    glCompileShader(shader);
+    return shader;
 }
 
-void OpenGLWindow::render()
+void OpenGLWindow::initializeGL()
 {
-    if (!m_device)
-        m_device = new QOpenGLPaintDevice;
+    initializeOpenGLFunctions();
 
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glClearColor(0,0,0,1);
 
-    m_device->setSize(size());
+    initShaders();
+    initTextures();
 
-    QPainter painter(m_device);
-    render(&painter);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+
+    geometries = new GeometryEngine;
+
+    timer.start(12,this);
 }
-
-void OpenGLWindow::renderLater()
+void OpenGLWindow::initShaders()
 {
-    if (!m_update_pending) {
-        m_update_pending = true;
-        QCoreApplication::postEvent(this, new QEvent(QEvent::UpdateRequest));
-    }
+    // Compile vertex shader
+    if (!program.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/vshader.glsl"))
+        close();
+
+    // Compile fragment shader
+    if (!program.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/fshader.glsl"))
+        close();
+
+    // Link shader pipeline
+    if (!program.link())
+        close();
+
+    // Bind shader pipeline for use
+    if (!program.bind())
+        close();
 }
 
-bool OpenGLWindow::event(QEvent *event)
+void OpenGLWindow::initTextures()
 {
-    switch (event->type()) {
-    case QEvent::UpdateRequest:
-        m_update_pending = false;
-        renderNow();
-        return true;
-    default:
-        return QWindow::event(event);
-    }
-}
+    // Load cube.png image
+    texture = new QOpenGLTexture(QImage(":/cube.png").mirrored());
 
-void OpenGLWindow::exposeEvent(QExposeEvent *event)
+    // Set nearest filtering mode for texture minification
+    texture->setMinificationFilter(QOpenGLTexture::Nearest);
+
+    // Set bilinear filtering mode for texture magnification
+    texture->setMagnificationFilter(QOpenGLTexture::Linear);
+
+    // Wrap texture coordinates by repeating
+    // f.ex. texture coordinate (1.1, 1.2) is same as (0.1, 0.2)
+    texture->setWrapMode(QOpenGLTexture::Repeat);
+}
+void OpenGLWindow::paintGL()
 {
-    Q_UNUSED(event);
+    // Clear color and depth buffer
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    if (isExposed())
-        renderNow();
+    texture->bind();
+
+    // Calculate model view transformation
+    QMatrix4x4 matrix;
+    matrix.translate(0.0, 0.0, -5.0);
+
+
+    // Set modelview-projection matrix
+    program.setUniformValue("mvp_matrix", projection * matrix);
+
+    // Use texture unit 0 which contains cube.png
+    program.setUniformValue("texture", 0);
+
+    // Draw cube geometry
+    geometries->drawCubeGeometry(&program);
 }
 
-void OpenGLWindow::renderNow()
+void OpenGLWindow::resizeGL(int w, int h)
 {
-    if (!isExposed())
-        return;
+    // Calculate aspect ratio
+    qreal aspect = qreal(w) / qreal(h ? h : 1);
 
-    bool needsInitialize = false;
+    // Set near plane to 3.0, far plane to 7.0, field of view 45 degrees
+    const qreal zNear = 3.0, zFar = 7.0, fov = 45.0;
 
-    if (!m_context) {
-        m_context = new QOpenGLContext(this);
-        m_context->setFormat(requestedFormat());
-        m_context->create();
+    // Reset projection
+    projection.setToIdentity();
 
-        needsInitialize = true;
-    }
-
-    m_context->makeCurrent(this);
-
-    if (needsInitialize) {
-        initializeOpenGLFunctions();
-        initialize();
-    }
-
-    render();
-
-    m_context->swapBuffers(this);
-
-    if (m_animating)
-        renderLater();
+    // Set perspective projection
+    projection.perspective(fov, aspect, zNear, zFar);
 }
 
-void OpenGLWindow::setAnimating(bool animating)
-{
-    m_animating = animating;
-
-    if (animating)
-        renderLater();
-}
 

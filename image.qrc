@@ -2,5 +2,9 @@
     <qresource prefix="/">
         <file>test.png</file>
         <file>side1.png</file>
+        <file>testfsh.fsh</file>
+        <file>vshader.glsl</file>
+        <file>cube.png</file>
+        <file>fshader.glsl</file>
     </qresource>
 </RCC>

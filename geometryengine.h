@@ -3,7 +3,7 @@
 ** Copyright (C) 2015 The Qt Company Ltd.
 ** Contact: http://www.qt.io/licensing/
 **
-** This file is part of the documentation of the Qt Toolkit.
+** This file is part of the QtCore module of the Qt Toolkit.
 **
 ** $QT_BEGIN_LICENSE:BSD$
 ** You may use this file under the terms of the BSD license as follows:
@@ -38,36 +38,26 @@
 **
 ****************************************************************************/
 
-#include "openglwindow.h"
+#ifndef GEOMETRYENGINE_H
+#define GEOMETRYENGINE_H
 
-#include <QApplication>
-#include <QtGui/QMatrix4x4>
-#include <QtGui/QOpenGLShaderProgram>
-#include <QtGui/QScreen>
-#include<QOpenGLTexture>
-#include <QtCore/qmath.h>
-#include<QImage>
-#include<QString>
-#include<QOpenGLShaderProgram>
-#include<QOpenGLContext>
+#include <QOpenGLFunctions>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLBuffer>
 
-
-int main(int argc, char **argv)
+class GeometryEngine : protected QOpenGLFunctions
 {
+public:
+    GeometryEngine();
+    virtual ~GeometryEngine();
 
-    Q_INIT_RESOURCE(image);
+    void drawCubeGeometry(QOpenGLShaderProgram *program);
 
-    QApplication app(argc, argv);
+private:
+    void initCubeGeometry();
 
-    QSurfaceFormat format;
-    //format.setSamples(16);
-    format.setDepthBufferSize(24);
-    QSurfaceFormat::setDefaultFormat(format);
+    QOpenGLBuffer arrayBuf;
+    QOpenGLBuffer indexBuf;
+};
 
-    OpenGLWindow window;
-    window.setFormat(format);
-    window.resize(640, 480);
-    window.show();
-
-    return app.exec();
-}
+#endif // GEOMETRYENGINE_H

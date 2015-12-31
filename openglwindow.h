@@ -41,6 +41,12 @@
 #include <QtGui/QWindow>
 #include <QtGui/QOpenGLFunctions>
 #include<QOpenGLBuffer>
+#include<QOpenGLWidget>
+#include<QTimer>
+#include<QMatrix4x4>
+#include<QOpenGLTexture>
+#include"geometryengine.h"
+#include<QOpenGLShader>
 
 QT_BEGIN_NAMESPACE
 class QPainter;
@@ -48,34 +54,47 @@ class QOpenGLContext;
 class QOpenGLPaintDevice;
 QT_END_NAMESPACE
 
-class OpenGLWindow : public QWindow, protected QOpenGLFunctions
+class OpenGLWindow : public QOpenGLWidget, protected QOpenGLFunctions
 {
     Q_OBJECT
 public:
-    explicit OpenGLWindow(QWindow *parent = 0);
+    explicit OpenGLWindow(QWidget *parent = 0);
     ~OpenGLWindow();
-
-    virtual void render(QPainter *painter);
-    virtual void render();
-
-    virtual void initialize();
-
-    void setAnimating(bool animating);
-
-public slots:
-    void renderLater();
-    void renderNow();
-
 protected:
-    bool event(QEvent *event) Q_DECL_OVERRIDE;
+    void timerEvent(QTimerEvent *e) Q_DECL_OVERRIDE;
+    void paintGL() Q_DECL_OVERRIDE;
+    void resizeGL(int w, int h) Q_DECL_OVERRIDE;
+    void initializeGL() Q_DECL_OVERRIDE;
 
-    void exposeEvent(QExposeEvent *event) Q_DECL_OVERRIDE;
-
+    void initShaders();
+    void initTextures();
 private:
+    QBasicTimer timer;
     bool m_update_pending;
     bool m_animating;
 
+    QMatrix4x4 projection;
+
     QOpenGLContext *m_context;
-    QOpenGLPaintDevice *m_device;
+
+    GLuint loadShader(GLenum type, const char *source);
+
+    GLuint m_posAttr;
+    GLuint m_colAttr;
+    GLuint m_matrixUniform;
+    int xRot;
+    int yRot;
+    int zRot;
+
+    QOpenGLTexture *texture;
+
+    GeometryEngine *geometries;
+
+    QOpenGLShaderProgram program;
+
+    QOpenGLBuffer vbo;
+
+
+    int m_frame;
 };
 

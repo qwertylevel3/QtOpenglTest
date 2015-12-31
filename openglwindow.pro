@@ -1,7 +1,10 @@
 include(openglwindow.pri)
 
+QT       += core gui widgets
+
 SOURCES += \
-    main.cpp
+    main.cpp \
+    geometryengine.cpp
 
 target.path = $$[QT_INSTALL_EXAMPLES]/gui/openglwindow
 INSTALLS += target
@@ -12,3 +15,6 @@ DISTFILES += \
 
 RESOURCES += \
     image.qrc
+
+HEADERS += \
+    geometryengine.h
